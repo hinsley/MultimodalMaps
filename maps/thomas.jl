@@ -117,8 +117,8 @@ section_points = [
 
 # The timeseries function used for the coordinate in
 # the return map.
-function return_map_function(x)
-  return x[1]^2+x[2]^2+x[3]^2
+function return_map_function(u)
+  return u[1]^2+u[2]^2+u[3]^2
 end
 
 # Construct the return map graph.
@@ -174,9 +174,6 @@ begin
 
   # Create line plot.
   lines!(ax, points, color=:blue, linewidth=0.5)
-
-  # Draw a line between two equilibria.
-  # lines!(ax, [eq1, eq2], color=:red, linewidth=2)
 
   # Plot points of section.
   scatter!(ax, section_points, color=:red, markersize=10)
