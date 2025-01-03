@@ -2,11 +2,24 @@ function add(
   x::Vector{Integer},
   y::Vector{Integer}
 )::Vector{Integer}
-  @assert length(x) == length(y)
-  n = length(x)
-  result = copy(x)
-  for i in 1:n
-    result[i] += y[i]
+  m = length(x)
+  n = length(y)
+  if m < n
+    result = zeros(Integer, n)
+    for i in 1:m
+      result[i] = x[i] + y[i]
+    end
+    for i in m+1:n
+      result[i] = y[i]
+    end
+  else
+    result = zeros(Integer, m)
+    for i in 1:n
+      result[i] = x[i] + y[i]
+    end
+    for i in n+1:m
+      result[i] = x[i]
+    end
   end
   return result
 end

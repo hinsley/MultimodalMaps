@@ -13,7 +13,7 @@ function determinant_encoding(det)
   encoding = 0
   power = 1
   for k in 1:K+1
-    encoding += coeffs_encoded[k] * alphabet_size^power
+    encoding += coeffs_encoded[k] / alphabet_size^power
     power += 1
   end
 
