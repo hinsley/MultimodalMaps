@@ -17,6 +17,7 @@ end
 u0 = [1.0, 1.0, 0.5]
 p = [0.208186]
 tspan = (0.0, 1e6)
+transient_time = 1e2
 
 prob = ODEProblem(thomas_derivatives!, u0, tspan, p)
 
@@ -35,22 +36,12 @@ prob = ODEProblem(thomas_derivatives!, u0, tspan, p)
 # u0 = [10.0, 0.0, 20.0]
 # p = [10.0, 28.0, 8/3]
 # tspan = (0.0, 2e3)
-# transient_time = 1e2
 
 # prob = ODEProblem(lorenz_derivatives!, u0, tspan, p)
 
-### Specify Poincare section as a terminator callback.
-# Define equilibrium points.
-# eq1 = Point3f(2.575647587674765, 2.575647587674765, 2.575647587674765)
-# eq2 = Point3f(2.459147755309479, 0.5374650978896967, 3.0294651370145176)
-# condition(u, t, integrator) = p[1] * u[3] - sin(u[1])
-# affect!(integrator) = terminate!(integrator)
-# cb = ContinuousCallback(condition, affect!, nothing)
-###
-
 # Solve orbit and discard transient.
 @time begin
-  sol_full = solve(prob, Tsit5(), reltol=1e-10, abstol=1e-10, saveat=1e-2)#, callback=cb)
+  sol_full = solve(prob, Tsit5(), reltol=1e-10, abstol=1e-10, saveat=1e-2)
   # Get index of first point after transient_time
   start_idx = findfirst(t -> t >= transient_time, sol_full.t)
   # Create new solution with transient discarded
@@ -103,16 +94,73 @@ ordinal_symbol = sortperm(weighted_entropies, rev=true)[ranked_ordinal_symbol_in
 # of the highest entropy ordinal symbol.
 section_indices = Int[]
 for i in 2:length(ordinal_symbols)
-  if ordinal_symbols[i] == ordinal_symbol && ordinal_symbols[i-1] != ordinal_symbol
+  if ordinal_symbols[i] == ordinal_symbol && ordinal_symbols[i-1] != ordinal_symbol && sqrt(xs[(i - 1)*w + 1]) > 4.2
     push!(section_indices, (i - 1)*w + 1)
   end
 end
+
+# Calculate the nth iterate of the section.
+section_iterate = 4
+section_iterate_offset = 1 # Should be from 1 to section_iterate.
+section_indices = [
+  section_indices[i]
+  for i in section_iterate_offset:section_iterate:length(section_indices)
+]
 
 # Get the points in the section.
 section_points = [
   Point3f(sol.u[i][1], sol.u[i][2], sol.u[i][3])
   for i in section_indices
 ]
+
+### Generate a return map from the section.
+
+# The timeseries function used for the coordinate in
+# the return map.
+function return_map_function(x)
+  return x[1]^2+x[2]^2+x[3]^2
+end
+
+# Construct the return map graph.
+return_map_points = [
+  return_map_function(sol.u[i])
+  for i in section_indices
+]
+return_map_endpoints = [
+  minimum(return_map_points),
+  maximum(return_map_points)
+]
+return_map_xs = return_map_points[1:end-1]
+return_map_ys = return_map_points[2:end]
+cobweb_xs = [return_map_xs[1]]
+cobweb_ys = [return_map_xs[1]]
+for i in 1:length(return_map_xs)-1
+    push!(cobweb_xs, cobweb_xs[end], return_map_xs[i+1])
+    push!(cobweb_ys, return_map_ys[i], return_map_ys[i])
+end
+push!(cobweb_xs, cobweb_xs[end])
+push!(cobweb_ys, return_map_ys[end])
+
+# Plot the return map.
+begin
+  fig = Figure()
+  ax = Axis(fig[1, 1],
+    aspect=1,
+    title="Return map for Thomas attractor",
+    titlesize=30,
+    xlabel=L"\hat{x}_i",
+    ylabel=L"\hat{x}_{i+1}",
+    xlabelsize=30,
+    ylabelsize=30
+  )
+  lines!(ax, cobweb_xs, cobweb_ys, color=:black, linewidth=0.03)
+  lines!(ax, return_map_endpoints, return_map_endpoints, color=:gray)
+  scatter!(ax, return_map_xs, return_map_ys, color=:blue, markersize=5)
+  display(fig)
+
+  # Optionally save the final figure.
+  # save("thomas_return_map.png", fig)
+end
 
 # Create 3D plot of the solution.
 begin
@@ -132,6 +180,20 @@ begin
 
   # Plot points of section.
   scatter!(ax, section_points, color=:red, markersize=10)
+
+  # Plot section-pruning sphere.
+  r = 4.2 # Radius.
+  u = range(0, 2π, length=100)
+  v = range(0, π, length=100)
+  
+  x = [r * cos(u) * sin(v) for u in u, v in v]
+  y = [r * sin(u) * sin(v) for u in u, v in v]
+  z = [r * cos(v) for u in u, v in v]
+
+  surface!(ax, x, y, z, color=:blue, alpha=0.5, transparency=true)
+
+  # Set equal aspect ratio
+  ax.aspect = :data
 
   # Display the figure.
   display(fig)
