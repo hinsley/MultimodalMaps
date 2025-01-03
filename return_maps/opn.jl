@@ -1,25 +1,10 @@
 # Ordinal partition networks
 # doi: 10.1063/5.0141438
 
-# What needs to be here? I need to be able to plug in a timeseries and
-# get out the corresponding entropies.
-# What data are needed to calculate these entropies?
-
-# We need to calculate three things:
-# - a_{i,j}, the Markov transition counts for going between each pair of
-#   ordinal partitions.
-# - \mathcal{O}, the number of occurrences of each particular ordinal.
-# - \mathcal{T}, the total number of windows into which the time series is
-#   divided. This quantity is given by the expression N - (m - 1)τ.
-# Letting K = \mathcal{O}/\mathcal{T}, the weighted entropy is then
-# calculated as
-# H_w = -\sum_i Kp_i \log_2(Kp_i),
-# where p_i = \sum_j a_{i, j} / \sum_{j, k} a_{j, k}.
-
 # The parameters for the ordinal partition network are:
 # - w: The number of points in a window before beginning the
-#   successive window.
-# - m: The number of points to sample per window.
+#   successive window ("lag").
+# - m: The number of points to sample per window ("embedding dimension").
 # - τ: The sampling delay between points within a window. 1 is no delay.
 
 using Pkg
