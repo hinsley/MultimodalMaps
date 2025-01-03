@@ -72,7 +72,7 @@ m = 4
 w2 = 1
 m2 = 3
 τ2 = 1
-xs = [u[3] for u in sol.u]
+xs = [u[1]^2+u[2]^2+u[3]^2 for u in sol.u]
 ordinal_symbols = encode_chronological_timeseries(xs, w, m, τ)
 weighted_entropies = Float64[]
 @time for ordinal_symbol in 1:factorial(m)
