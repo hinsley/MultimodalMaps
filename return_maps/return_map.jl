@@ -109,7 +109,7 @@ function calculate_return_itinerary(
     if (
       ordinal_symbols1[i] == section_ordinal_symbol
       && ordinal_symbols1[i-1] != section_ordinal_symbol
-      && section_constraint(xs[sol1_idx])
+      && section_constraint(sol1.u[sol1_idx])
     )
       push!(section_idxs, sol1_idx)
     end
