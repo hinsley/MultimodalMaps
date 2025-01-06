@@ -42,9 +42,9 @@ prob = ODEProblem(thomas_derivatives!, u0, tspan, p)
 # Solve orbit and discard transient.
 @time begin
   sol_full = solve(prob, Tsit5(), reltol=1e-10, abstol=1e-10, saveat=1e-2)
-  # Get index of first point after transient_time
+  # Get index of first point after transient_time.
   start_idx = findfirst(t -> t >= transient_time, sol_full.t)
-  # Create new solution with transient discarded
+  # Create new solution with transient discarded.
   sol = DiffEqBase.build_solution(
     prob,
     sol_full.alg,
@@ -82,7 +82,7 @@ weighted_entropies = Float64[]
       m2,
       τ2
     )
-    push!(weighted_entropies, weighted_entropy(length(xs), m, ordinal_symbols2, m2))
+    push!(weighted_entropies, weighted_entropy(length(xs), w, m, τ, ordinal_symbols2, m2))
   end
 end
 println("Weighted entropies (sorted): $(reverse(sort(weighted_entropies)))")

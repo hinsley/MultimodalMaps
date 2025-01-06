@@ -45,12 +45,13 @@ function encode_chronological_timeseries(
   τ::Int
 )::Vector{Int}
   ordinal_indices = get_ordinal_indices(m)
+  l = (m-1)*τ
   return [
     encode_chronological(
-      xs[starting_index:τ:starting_index+(m-1)*τ],
+      xs[starting_index:τ:starting_index+l],
       ordinal_indices
     )
-    for starting_index in 1:w:length(xs)-(m-1)*τ
+    for starting_index in 1:w:length(xs)-l
   ]
 end
 
@@ -90,7 +91,9 @@ end
 # Calculate weighted entropy for a particular ordinal symbol timeseries.
 function weighted_entropy(
   N::Int, # Length of original time series.
+  w::Int, # Window lag for original time series.
   m::Int, # Samples per window for original time series.
+  τ::Int, # Sampling delay for original time series.
   ordinal_symbols2::Vector{Int},
   m2::Int # Samples per window for this ordinal symbol's time series.
 )::Float64
