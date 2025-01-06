@@ -14,12 +14,12 @@ end
 u0 = [1.0, 1.0, 0.5]
 p = [0.208186]
 transient_time = 2e2
-dt = 1e-3
-tspan1 = (0.0, 1e4)
-tspan2 = (1e4, 1e6)
+dt = 1e-2
+tspan1 = (0.0, 1e3)
+tspan2 = (1e3, 1e5)
 ordinal_function = u -> sqrt(u[1]^2+u[2]^2+u[3]^2)
 return_map_coordinate = ordinal_function
-section_constraint = u -> ordinal_function(u) > 4
+section_constraint = u -> ordinal_function(u) > 4.41
 iterate = 4 # Compositional power of the return map.
 w1 = 1
 m1 = 4
