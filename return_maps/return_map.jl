@@ -95,7 +95,10 @@ function calculate_return_itinerary(
   println("Weighted entropies (sorted): $(reverse(sort(weighted_entropies)))")
 
   # Select an ordinal pattern to use for constructing the return map.
-  section_ordinal_symbol = sortperm(weighted_entropies, rev=true)[ranked_ordinal_symbol_index]
+  # Filter out NaN values and sort remaining indices
+  valid_indices = findall(!isnan, weighted_entropies)
+  sorted_valid_indices = sort(valid_indices, by=i->weighted_entropies[i], rev=true)
+  section_ordinal_symbol = sorted_valid_indices[ranked_ordinal_symbol_index]
 
   ### Don't be wasteful! Use this first trajectory to construct some of the return map.
   
