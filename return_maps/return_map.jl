@@ -1,11 +1,15 @@
 using Pkg
 Pkg.activate(".")
 
+using Clustering
 using DataStructures
 using DifferentialEquations
 using GLMakie
+using Peaks
+using Statistics
 
 include("../return_maps/opn.jl")
+include("../return_maps/douglas_peucker.jl")
 
 # Constructs a sequence of function values 
 function calculate_return_itinerary(
@@ -183,4 +187,140 @@ function calculate_return_itinerary(
   )
 
   return return_map_itinerary
+end
+
+# Finds the lap endpoints of a return map by clustering the points
+# in the graph reconstructed from the itinerary.
+function laps(
+  itinerary::Vector{Float64},
+  dbscan_ε::Float64,
+  y_scaling::Float64,
+  filter_ε::Float64
+)
+# )::Vector{Vector{Tuple{Float64, Float64}}}
+  xs = itinerary[1:end-1]
+  ys = itinerary[2:end]
+  order = sortperm(xs)
+  point_matrix = hcat(xs[order], ys[order] * y_scaling)'
+  @time dbscan_result = dbscan(point_matrix, dbscan_ε)
+  cluster_endpoints = Tuple{Float64, Float64}[]
+  clusters = Vector{Tuple{Float64, Float64}}[]
+  simplified_clusters = Vector{Tuple{Float64, Float64}}[]
+  extrema = Vector{Tuple{Float64, Float64}}[]
+
+  for cluster in dbscan_result.clusters
+    cluster_xs = xs[order][cluster.core_indices]
+    cluster_ys = ys[order][cluster.core_indices]
+    cluster_points = collect(zip(cluster_xs, cluster_ys))
+    push!(clusters, cluster_points)
+    push!(cluster_endpoints, (cluster_xs[1], cluster_xs[end]))
+    println("Decimating cluster.")
+    @time simplified_cluster_xs, simplified_cluster_ys = decimate_function(
+      cluster_xs,
+      cluster_ys,
+      filter_ε,
+      true
+    )
+    simplified_cluster_points = collect(zip(simplified_cluster_xs, simplified_cluster_ys))
+    push!(simplified_clusters, simplified_cluster_points)
+  end
+
+
+  return clusters, simplified_clusters
+end
+
+# Interpolate a return map function.
+function interpolate_return_map(
+  itinerary::Vector{Float64},
+  pieces::Int,
+  piece_resolution::Int,
+  sparsity::Int=1,
+  return_critical_points::Bool=false
+)::Union{Tuple{Function, Vector{Tuple{Vector{Float64}, Vector{Float64}}}}, Tuple{Function, Vector{Float64}}}
+  xs = itinerary[1:end-1]
+  ys = itinerary[2:end]
+  order = sortperm(xs)[1:sparsity:end]
+  # Calculate differences between consecutive y values after sorting by x.
+  y_diffs = diff(ys[order])
+  # Discontinuities are where the graph suddenly changes drastically
+  # in y.
+  discontinuities = sort(sortperm(abs.(y_diffs), rev=true)[1:pieces-1])
+  # Segment the domain into points lying on each continuous piece.
+  segments = Vector{Tuple{Int, Int}}()
+  start_idx = 1
+  for d in discontinuities
+    push!(segments, (start_idx, d))
+    start_idx = d + 1
+  end
+  push!(segments, (start_idx, length(xs))) # Last segment.
+  println([xs[order][seg_end] for (seg_start, seg_end) in segments[1:end-1]])
+  println(segments[1][2])
+  # For each continuous domain segment, sample `piece_resolution` points.
+  piece_data = Vector{Tuple{Vector{Float64}, Vector{Float64}}}(undef, length(segments))
+  for (seg_i, (seg_start, seg_end)) in enumerate(segments)
+    point_idxs = [round(Int, x) for x in range(seg_start, seg_end, length=piece_resolution)]
+    point_idxs = [argmin(abs.(x .- (1:sparsity:length(xs)))) for x in point_idxs]
+    piece_data[seg_i] = (xs[order][point_idxs], ys[order][point_idxs])
+  end
+  # Construct the piecewise continuous function which is linearly
+  # interpolated between sampled points.
+  function map(x::Float64)::Float64
+    # Determine to which segment x belongs.
+    for (seg_i, (seg_start, seg_end)) in enumerate(segments)
+      if x >= xs[order][seg_start] && x <= xs[order][seg_end]
+        # Find the two sampled points to interpolate between.
+        for i in 1:piece_resolution-1
+          left_x = piece_data[seg_i][1][i]
+          right_x = piece_data[seg_i][1][i+1]
+          if left_x <= x <= right_x
+            # Linearly interpolate between the sampled points.
+            left_y = piece_data[seg_i][2][i]
+            right_y = piece_data[seg_i][2][i+1]
+            return left_y + (right_y - left_y) * (x - left_x) / (right_x - left_x)
+          end
+        end
+      end
+    end
+    # If x is outside the domain, throw a DomainError.
+    throw(DomainError(x, "input outside of domain"))
+  end
+
+  if return_critical_points
+    # Leftmost and rightmost points of domain are critical points.
+    critical_points = [xs[order][1], xs[order][end]]
+    # Push the discontinuities between segments.
+    for seg_i in 1:length(segments)-1
+      push!(
+        critical_points,
+        [
+          # Right side of left segment.
+          xs[order][segments[seg_i][2]],
+          # Left side of right segment.
+          xs[order][segments[seg_i+1][1]]
+        ]
+      )
+    end
+    # Push the minima and maxima in the interior of each segment.
+    for segment_points in piece_data
+      # Find local extrema by checking points against neighbors.
+      for i in 2:length(segment_points[2])-1
+          y_prev = segment_points[2][i-1]
+          y_curr = segment_points[2][i]
+          y_next = segment_points[2][i+1]
+          
+          # Local maximum
+          if y_curr > y_prev && y_curr > y_next
+              push!(critical_points, [segment_points[1][i]])
+          end
+          # Local minimum 
+          if y_curr < y_prev && y_curr < y_next
+              push!(critical_points, [segment_points[1][i]])
+          end
+      end
+    end
+
+    return map, sort(critical_points)
+  else
+    return map, piece_data
+  end
 end

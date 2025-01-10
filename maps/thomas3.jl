@@ -1,6 +1,8 @@
 using Pkg
 Pkg.activate(".")
 
+using Colors
+
 include("../return_maps/return_map.jl")
 
 function thomas_derivatives!(du, u, p, t)
@@ -14,9 +16,9 @@ end
 u0 = [1.0, 1.0, 0.5]
 p = [0.208186]
 transient_time = 2e2
-dt = 1e-2
+dt = 3e-3
 tspan1 = (0.0, 1e3)
-tspan2 = (1e3, 1e5)
+tspan2 = (1e3, 7e5)
 ordinal_function = u -> sqrt(u[1]^2+u[2]^2+u[3]^2)
 return_map_coordinate = ordinal_function
 section_constraint = u -> ordinal_function(u) > 4.41
@@ -48,7 +50,28 @@ return_map_itinerary = calculate_return_itinerary(
   τ2,
   ranked_ordinal_symbol_index
 )
-  
+
+include("../return_maps/return_map.jl")
+dbscan_ε = 3e-5
+y_scaling = 3e-2
+filter_ε = 2.5e-5
+clusters, simplified_clusters = laps(
+  return_map_itinerary[1:iterate:end-iterate],
+  dbscan_ε,
+  y_scaling,
+  filter_ε,
+)
+
+# return_map, critical_points = interpolate_return_map(
+# include("../return_maps/return_map.jl")
+# return_map, points = interpolate_return_map(
+#   return_map_itinerary[1:iterate:end-iterate],
+#   4,
+#   200,
+#   2,
+#   # true
+# )
+
 # Construct the return map graph.
 return_map_xs = return_map_itinerary[1:iterate:end-iterate]
 return_map_ys = return_map_itinerary[1+iterate:iterate:end]
@@ -91,13 +114,62 @@ begin
     return_map_endpoints,
     color=:gray
   )
-  scatter!( # Plot return map graph.
-    ax,
-    return_map_xs,
-    return_map_ys,
-    color=:blue,
-    markersize=5
-  )
+  # scatter!( # Plot return map graph.
+  #   ax,
+  #   return_map_xs,
+  #   return_map_ys,
+  #   color=:blue,
+  #   markersize=5
+  # )
+  cluster_colors = []
+  for cluster in clusters
+    push!(cluster_colors, rand(RGB))
+    scatter!(
+      ax,
+      cluster,
+      markersize=5,
+      color=(cluster_colors[end], 0.2)
+    )
+  end
+  # Plot decimated return map pieces.
+  for (simplified_cluster, cluster_color) in zip(simplified_clusters, cluster_colors)
+    lines!(
+      ax,
+      simplified_cluster,
+      linewidth=3,
+      color=cluster_color
+    )
+  end
+  # Plot circles of radius dbscan_ε around each point
+  # for (x, y) in zip(return_map_xs, return_map_ys)
+  #   points = [Point2f(x + dbscan_ε * cos(t), y + dbscan_ε * sin(t) / y_scaling) for t in range(0, 2π, length=100)]
+  #   lines!(ax, points, color=(:black, 0.2))
+  # end
+  
+  # Plot extrema.
+  # for cluster_extrema in extrema
+  #   for (x, y) in cluster_extrema
+  #     scatter!(
+  #       ax,
+  #       [x],
+  #       [y],
+  #       color=:black,
+  #       markersize=10
+  #     )
+  #   end
+  # end
+
+  # Plot sampled point curves.
+  # for segment in points
+  #   lines!(
+  #     ax,
+  #     segment[1],
+  #     segment[2],
+  #     color=:red,
+  #     linewidth=2
+  #   )
+  #   println("Plotting segment from x=$(segment[1][1]) to x=$(segment[1][end])")
+  # end
 
   display(fig)
 end
