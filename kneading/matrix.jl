@@ -29,6 +29,46 @@ function kneading_matrix!(matrix::Array{Int8}, map, critical_points, p)
   end
 end
 
+function kneading_matrix_from_kneading_sequences!(
+  matrix::Array{Int8},
+  kneading_sequences::Vector{Vector{Int8}},
+  orientations::Vector{Bool},
+  K::Int
+)
+  m = length(orientations) - 1 # Number of critical points.
+  @assert length(kneading_sequences) == 2 * m
+  
+  for i in 1:m
+    # Process left kneading sequence (odd index).
+    left_seq = kneading_sequences[2*i-1]
+    cumulative_orientation = orientations[i] ? 1 : -1
+    lap = i # Start in current lap.
+    
+    # Initialize zeroth iterate (k=0).
+    matrix[i, lap, 1] += cumulative_orientation
+    
+    for k in 2:K
+      lap = abs(left_seq[k])
+      cumulative_orientation *= orientations[lap] ? 1 : -1
+      matrix[i, lap, k] -= cumulative_orientation
+    end
+    
+    # Process right kneading sequence (even index).
+    right_seq = kneading_sequences[2*i]
+    cumulative_orientation = orientations[i+1] ? 1 : -1
+    lap = i + 1 # Start in next lap.
+    
+    # Initialize zeroth iterate (k=0).
+    matrix[i, lap, 1] += cumulative_orientation
+    
+    for k in 2:K+1
+      lap = abs(right_seq[k])
+      cumulative_orientation *= orientations[lap] ? 1 : -1
+      matrix[i, lap, k] += cumulative_orientation
+    end
+  end
+end
+
 function allocate_kneading_matrix(critical_points, K)
   m = length(critical_points) # Number of critical points.
   n = m+1 # Number of laps.

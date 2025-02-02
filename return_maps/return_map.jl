@@ -28,10 +28,12 @@ function calculate_return_itinerary(
   m1::Int,
   m2::Int, # OPN parameters for each ordinal symbol's constructed timeseries.
   τ1::Int,
-  τ2::Int,
-  ranked_ordinal_symbol_index::Int = 1 # If 1, use highest weighted entropy ordinal pattern. If higher, use lower entropy. Maximum of factorial(m1).
-)::Vector{Float64}
+  τ2::Int;
+  ranked_ordinal_symbol_index::Int = 1, # If 1, use highest weighted entropy ordinal pattern. If higher, use lower entropy. Maximum of factorial(m1).
+  return_points::Bool = false # If true, return the return map's points in the state space.
+)::Union{Vector{Float64}, Tuple{Vector{Float64}, Vector{Vector{Float64}}}}
   return_map_itinerary = Float64[]
+  return_map_points = Vector{Float64}[]
 
   prob1 = ODEProblem(derivatives!, u0, tspan1, p)
 
@@ -124,6 +126,9 @@ function calculate_return_itinerary(
     return_map_itinerary,
     [return_map_coordinate(sol1.u[i]) for i in section_idxs]
   )
+  if return_points
+    append!(return_map_points, [sol1.u[i] for i in section_idxs])
+  end
 
   ### Construct the return map during integration.
   prob2 = ODEProblem(derivatives!, sol1.u[end], tspan2, p)
@@ -164,6 +169,9 @@ function calculate_return_itinerary(
       )
         # Add the first point in the window to the return map.
         push!(return_map_itinerary, return_map_coordinate(u_buffer[1]))
+        if return_points
+          push!(return_map_points, u_buffer[1])
+        end
       end
       # Save the current ordinal symbol for next step.
       prev_ordinal_symbol = ordinal_symbol
@@ -186,18 +194,21 @@ function calculate_return_itinerary(
     maxiters=1e10
   )
 
-  return return_map_itinerary
+  return (
+    return_points
+    ? (return_map_itinerary, return_map_points)
+    : return_map_itinerary
+  )
 end
 
 # Finds the lap endpoints of a return map by clustering the points
 # in the graph reconstructed from the itinerary.
-function laps(
+function kneading_increment_idxs(
   itinerary::Vector{Float64},
   dbscan_ε::Float64,
   y_scaling::Float64,
   filter_ε::Float64
-)
-# )::Vector{Vector{Tuple{Float64, Float64}}}
+)::Tuple{Vector{Float64}, Vector{Tuple{Int, Int}}, Vector{Bool}}
   xs = itinerary[1:end-1]
   ys = itinerary[2:end]
   order = sortperm(xs)
@@ -225,102 +236,73 @@ function laps(
     push!(simplified_clusters, simplified_cluster_points)
   end
 
+  # Track all critical points with their indices used for kneading increments.
+  kneading_points = Tuple{Float64, Tuple{Int, Int}}[]
 
-  return clusters, simplified_clusters
-end
+  # 1. Add cluster boundaries with their exact indices.
+  for cluster_idx in 2:length(dbscan_result.clusters)
+    prev_cluster = dbscan_result.clusters[cluster_idx-1]
+    curr_cluster = dbscan_result.clusters[cluster_idx]
+    rightmost_prev = order[prev_cluster.core_indices[end]]
+    leftmost_curr = order[curr_cluster.core_indices[1]]
+    boundary_x = (simplified_clusters[cluster_idx][1][1] + simplified_clusters[cluster_idx-1][end][1])/2
+    push!(kneading_points, (boundary_x, (rightmost_prev, leftmost_curr)))
+  end
 
-# Interpolate a return map function.
-function interpolate_return_map(
-  itinerary::Vector{Float64},
-  pieces::Int,
-  piece_resolution::Int,
-  sparsity::Int=1,
-  return_critical_points::Bool=false
-)::Union{Tuple{Function, Vector{Tuple{Vector{Float64}, Vector{Float64}}}}, Tuple{Function, Vector{Float64}}}
-  xs = itinerary[1:end-1]
-  ys = itinerary[2:end]
-  order = sortperm(xs)[1:sparsity:end]
-  # Calculate differences between consecutive y values after sorting by x.
-  y_diffs = diff(ys[order])
-  # Discontinuities are where the graph suddenly changes drastically
-  # in y.
-  discontinuities = sort(sortperm(abs.(y_diffs), rev=true)[1:pieces-1])
-  # Segment the domain into points lying on each continuous piece.
-  segments = Vector{Tuple{Int, Int}}()
-  start_idx = 1
-  for d in discontinuities
-    push!(segments, (start_idx, d))
-    start_idx = d + 1
-  end
-  push!(segments, (start_idx, length(xs))) # Last segment.
-  println([xs[order][seg_end] for (seg_start, seg_end) in segments[1:end-1]])
-  println(segments[1][2])
-  # For each continuous domain segment, sample `piece_resolution` points.
-  piece_data = Vector{Tuple{Vector{Float64}, Vector{Float64}}}(undef, length(segments))
-  for (seg_i, (seg_start, seg_end)) in enumerate(segments)
-    point_idxs = [round(Int, x) for x in range(seg_start, seg_end, length=piece_resolution)]
-    point_idxs = [argmin(abs.(x .- (1:sparsity:length(xs)))) for x in point_idxs]
-    piece_data[seg_i] = (xs[order][point_idxs], ys[order][point_idxs])
-  end
-  # Construct the piecewise continuous function which is linearly
-  # interpolated between sampled points.
-  function map(x::Float64)::Float64
-    # Determine to which segment x belongs.
-    for (seg_i, (seg_start, seg_end)) in enumerate(segments)
-      if x >= xs[order][seg_start] && x <= xs[order][seg_end]
-        # Find the two sampled points to interpolate between.
-        for i in 1:piece_resolution-1
-          left_x = piece_data[seg_i][1][i]
-          right_x = piece_data[seg_i][1][i+1]
-          if left_x <= x <= right_x
-            # Linearly interpolate between the sampled points.
-            left_y = piece_data[seg_i][2][i]
-            right_y = piece_data[seg_i][2][i+1]
-            return left_y + (right_y - left_y) * (x - left_x) / (right_x - left_x)
-          end
+    # 2. Add internal extrema with their exact indices.
+    for (cluster_idx, simplified_cluster) in enumerate(simplified_clusters)
+        cluster = dbscan_result.clusters[cluster_idx]
+        # Check internal points for minima/maxima.
+        for i in 2:length(simplified_cluster)-1
+            prev = simplified_cluster[i-1]
+            current = simplified_cluster[i]
+            next = simplified_cluster[i+1]
+            
+            # Verify extremum using neighboring points.
+            is_min = current[2] < prev[2] && current[2] < next[2]
+            is_max = current[2] > prev[2] && current[2] > next[2]
+            
+            if is_min || is_max
+                cluster_xs = xs[order][cluster.core_indices]
+                closest_idx_in_cluster = argmin(abs.(cluster_xs .- current[1]))
+                original_idx = order[cluster.core_indices[closest_idx_in_cluster]]
+                push!(kneading_points, (current[1], (original_idx, original_idx)))
+            end
         end
-      end
-    end
-    # If x is outside the domain, throw a DomainError.
-    throw(DomainError(x, "input outside of domain"))
-  end
-
-  if return_critical_points
-    # Leftmost and rightmost points of domain are critical points.
-    critical_points = [xs[order][1], xs[order][end]]
-    # Push the discontinuities between segments.
-    for seg_i in 1:length(segments)-1
-      push!(
-        critical_points,
-        [
-          # Right side of left segment.
-          xs[order][segments[seg_i][2]],
-          # Left side of right segment.
-          xs[order][segments[seg_i+1][1]]
-        ]
-      )
-    end
-    # Push the minima and maxima in the interior of each segment.
-    for segment_points in piece_data
-      # Find local extrema by checking points against neighbors.
-      for i in 2:length(segment_points[2])-1
-          y_prev = segment_points[2][i-1]
-          y_curr = segment_points[2][i]
-          y_next = segment_points[2][i+1]
-          
-          # Local maximum
-          if y_curr > y_prev && y_curr > y_next
-              push!(critical_points, [segment_points[1][i]])
-          end
-          # Local minimum 
-          if y_curr < y_prev && y_curr < y_next
-              push!(critical_points, [segment_points[1][i]])
-          end
-      end
     end
 
-    return map, sort(critical_points)
-  else
-    return map, piece_data
+  # Sort all critical points by x-value.
+  sort!(kneading_points, by=x->x[1])
+
+  # Split into final outputs.
+  critical_points = [x for (x, _) in kneading_points]
+  boundary_indices = [indices for (_, indices) in kneading_points]
+
+  # Determine orientations of each lap (increasing or decreasing).
+  orientations = Bool[]
+  # 1. First lap.
+  increment = ys[boundary_indices[1][1]] - ys[order][1]
+  if increment > 0 # Increasing.
+    push!(orientations, true)
+  else # Decreasing.
+    push!(orientations, false)
   end
+  # 2. Interior laps.
+  for lap in 2:length(boundary_indices)
+    increment = ys[boundary_indices[lap][1]] - ys[boundary_indices[lap-1][2]]
+    if increment > 0 # Increasing.
+      push!(orientations, true)
+    else # Decreasing.
+      push!(orientations, false)
+    end
+  end
+  # 3. Last lap.
+  increment = ys[order][end] - ys[boundary_indices[end][2]]
+  if increment > 0 # Increasing.
+    push!(orientations, true)
+  else # Decreasing.
+    push!(orientations, false)
+  end
+
+  return critical_points, boundary_indices, orientations
 end
