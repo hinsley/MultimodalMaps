@@ -1,4 +1,4 @@
-function decimate_function(
+function decimate_graph(
   xs::Vector{Float64},
   ys::Vector{Float64},
   ε::Float64,
@@ -113,4 +113,52 @@ function decimate_function(
   end
   
   return (new_xs, new_ys)
+end
+
+function decimate(
+  points::Vector{Vector{Float64}},
+  ε::Float64,
+  distance_function
+)::Vector{Vector{Float64}}
+  # Helper to compute distance from point to line segment in R^n
+  function distance_to_segment(p::Vector{Float64}, a::Vector{Float64}, b::Vector{Float64})
+    v = b .- a
+    if all(v .== 0)
+      return distance_function(vcat(p, a))
+    end
+    
+    t = clamp(dot(p .- a, v) / dot(v, v), 0.0, 1.0)
+    projection = a .+ t .* v
+    return distance_function(vcat(p, projection))
+  end
+
+  # Recursive DP implementation for R^n
+  function douglas_peucker_rn(pts::Vector{Vector{Float64}}, first::Int, last::Int, eps::Float64)
+    if last - first < 2
+      return [first, last]
+    end
+
+    a, b = pts[first], pts[last]
+    max_dist = -1.0
+    max_idx = first
+
+    for i in first+1:last-1
+      dist = distance_to_segment(pts[i], a, b)
+      if dist > max_dist
+        max_dist = dist
+        max_idx = i
+      end
+    end
+
+    if max_dist > eps
+      left = douglas_peucker_rn(pts, first, max_idx, eps)
+      right = douglas_peucker_rn(pts, max_idx, last, eps)
+      return vcat(left[1:end-1], right)
+    else
+      return [first, last]
+    end
+  end
+
+  idxs = douglas_peucker_rn(points, 1, length(points), ε)
+  return points[idxs]
 end

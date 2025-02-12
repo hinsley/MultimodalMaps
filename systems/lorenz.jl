@@ -9,7 +9,7 @@ function derivatives!(du, u, p, t)
     du[3] = x*y - β*z
 end
 
-const default_parameters = [10.0, 28.0, 8/3]
+const default_parameters = [10.0, 75.9, 8/3]
 const parameter_ranges = [(0.1, 50.0), (0.1, 50.0), (0.1, 10.0)]
 const default_opn_params = (3, 4, 2, 1, 3, 1)
 const initial_condition = [1.0, 1.0, 1.0]

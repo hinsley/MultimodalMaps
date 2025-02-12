@@ -8,6 +8,7 @@ using GLMakie
 using Peaks
 using Statistics
 
+include("../return_maps/auto_coordinates.jl")
 include("../return_maps/opn.jl")
 include("../return_maps/douglas_peucker.jl")
 
@@ -21,7 +22,12 @@ function calculate_return_itinerary(
   tspan1::Tuple{Float64, Float64},
   tspan2::Tuple{Float64, Float64}, # Should start where tspan1 ends.
   ordinal_function::Function, # Should map state space to reals.
-  return_map_coordinate::Function, # Should map state space to reals.
+  return_map_parameter::Union{Function, Tuple{Float64, Int, Function}}, # Should either be
+  # a function mapping state space to reals, or a Douglas-Peucker
+  # decimation epsilon threshold value for constructing the automatic
+  # coordinate system for the return map as well as the number of
+  # longest segments to discard when constructing the piecewise
+  # linear curve for a coordinate system.
   section_constraint::Function, # Takes state vector as argument, returns Bool. If false, discards points from Poincare section.
   w1::Int, # OPN parameters for original timeseries of each trajectory.
   w2::Int,
@@ -122,13 +128,26 @@ function calculate_return_itinerary(
   end
 
   # Add the points to the return map.
+  append!(return_map_points, [sol1.u[i] for i in section_idxs])
+  # After integrating the first trajectory and getting the corresponding
+  # return map points in state space, either save the return map
+  # coordinate function or construct one automatically if a decimation
+  # epsilon threshold parameter is provided instead.
+  if length(return_map_parameter) == 1
+    return_map_coordinate = return_map_parameter
+  else
+    return_map_coordinate = auto_coordinates(
+      return_map_points,
+      return_map_parameter[1],
+      return_map_parameter[3],
+      return_map_parameter[2]
+    )
+  end
+  # Save the return map points in the appropriate coordinate system.
   append!(
     return_map_itinerary,
     [return_map_coordinate(sol1.u[i]) for i in section_idxs]
   )
-  if return_points
-    append!(return_map_points, [sol1.u[i] for i in section_idxs])
-  end
 
   ### Construct the return map during integration.
   prob2 = ODEProblem(derivatives!, sol1.u[end], tspan2, p)
@@ -226,7 +245,7 @@ function kneading_increment_idxs(
     push!(clusters, cluster_points)
     push!(cluster_endpoints, (cluster_xs[1], cluster_xs[end]))
     println("Decimating cluster.")
-    @time simplified_cluster_xs, simplified_cluster_ys = decimate_function(
+    @time simplified_cluster_xs, simplified_cluster_ys = decimate_graph(
       cluster_xs,
       cluster_ys,
       filter_ε,

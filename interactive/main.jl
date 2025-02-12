@@ -35,7 +35,7 @@ buttongrid = GridLayout(settings[1, 1])
 # Parameter controls.
 param_controls = [
   (; label="Trajectory 1 Time",    range=100:100:10000,    start=1000,          type=:float),
-  (; label="Trajectory 2 Time",    range=1000:100:100000,  start=10000,         type=:float),
+  (; label="Trajectory 2 Time",    range=0:100:100000,     start=10000,         type=:float),
   (; label="Transient Time",       range=100:100:1000,     start=200,           type=:float),
   (; label="Time Step",            range=1e-4:1e-4:1,      start=1e-2,          type=:float),
   (; label="m1 (Ordinal Pattern)", range=1:50,             start=opn_params[1], type=:natural),
@@ -45,6 +45,7 @@ param_controls = [
   (; label="n2",                   range=1:50,             start=opn_params[4], type=:natural),
   (; label="l2",                   range=1:50,             start=opn_params[6], type=:natural),
   (; label="Ordinal Function:",    range=nothing,          start="u[3]",        type=:expr),
+  (; label="Ordinal Symbol Index", range=1:99999,          start=1,             type=:natural),
   (; label="Return Coordinate:",   range=nothing,          start="u[3]",        type=:expr),
   (; label="Section Condition:",   range=nothing,          start="true",        type=:expr)
 ]
@@ -84,7 +85,7 @@ for (i, pc) in enumerate(param_controls)
     on(control.stored_string) do s
       val = tryparse(Int, s)
       if !isnothing(val) && val in pc.range
-        # Valid input
+        # Valid input.
       else
         @async begin
           sleep(0.1)
@@ -121,14 +122,19 @@ scatter_plots = []
 return_scatters = []
 
 include("../return_maps/return_map.jl")
+include("../return_maps/auto_coordinates.jl")
 
 # Create function generators for the dynamic expressions.
-function create_expr_function(expr_str)
-    parsed = Meta.parse(expr_str)
-    f = @eval (u) -> $parsed
-    # Force compilation by calling the function once with a dummy input.
+function create_expr_function(expr_str::String)::Function
+  parsed = Meta.parse(expr_str)
+  f = @eval (u) -> $parsed
+  # Force compilation by calling the function once with a dummy input.
+  try
     Base.invokelatest(f, zeros(3))
-    return (u) -> Base.invokelatest(f, u)
+  catch e
+    Base.invokelatest(f, zeros(6)) # In case of a distance function.
+  end
+  return (u) -> Base.invokelatest(f, u)
 end
 
 # Update plots function.
@@ -146,16 +152,37 @@ function update_plots()
   
   # Create compiled functions from expressions.
   ordinal_fn = create_expr_function(controls[11].stored_string[])
-  return_coord_fn = create_expr_function(controls[12].stored_string[])
-  section_condition_fn = create_expr_function(controls[13].stored_string[])
+  ranked_ordinal_symbol_index = tryparse(Int, controls[12].stored_string[]) |> v -> isnothing(v) ? 1 : v
+  return_coord_string = controls[13].stored_string[]
+  # Check if return coordinate function string starts with "auto".
+  if startswith(return_coord_string, "auto")
+    # Split string into words and parse parameters.
+    parts = split(return_coord_string)
+    if length(parts) >= 4
+      threshold = parse(Float64, parts[2])
+      truncation = parse(Int64, parts[3])
+      distance_fn = create_expr_function(String(parts[4]))
+      # Store both parameters as a tuple.
+      return_coord = (threshold, truncation, distance_fn)
+    else
+      # Throw an error.
+      error("Invalid auto return coordinate string. Should be Douglas-Peucker threshold, truncation quantity, distance function.")
+    end
+  else
+    # Create compiled function from expression.
+    return_coord = create_expr_function(controls[13].stored_string[])
+  end
+  section_condition_fn = create_expr_function(controls[14].stored_string[])
   
   # Solve ODE.
   prob = ODEProblem(sys.derivatives!, u0, (0.0, trajectory_time1), p0)
   sol = solve(prob, Tsit5(), abstol=1e-8, reltol=1e-8)
   
-  # Plot 3D trajectory (after transient time)
-  t_idx = findfirst(t -> t >= transient_time, sol.t)
-  lines!(ax3d, sol[1,t_idx:end], sol[2,t_idx:end], sol[3,t_idx:end], color=:blue)
+  # Plot 3D trajectory (after transient time).
+  if trajectory_time2 > 0.0
+    t_idx = findfirst(t -> t >= transient_time, sol.t)
+    lines!(ax3d, sol[1,t_idx:end], sol[2,t_idx:end], sol[3,t_idx:end], color=:blue)
+  end
   
   # Calculate return map using OPN parameters.
   return_vals, return_points = calculate_return_itinerary(
@@ -167,9 +194,10 @@ function update_plots()
     (0.0, trajectory_time1),
     (0.0, trajectory_time2),
     ordinal_fn,
-    return_coord_fn,
+    return_coord,
     section_condition_fn,
     opn_params...;
+    ranked_ordinal_symbol_index=ranked_ordinal_symbol_index,
     return_points=true
   )
   
@@ -180,9 +208,28 @@ function update_plots()
     [point[2] for point in return_points],
     [point[3] for point in return_points],
     color=:red,
-    markersize=5
+    markersize=3
   )
 
+  # If automatic coordinates used for return map, plot coordinate curve.
+  if trajectory_time2 == 0.0 && length(return_coord) > 1
+    return_curve = auto_coordinates(
+      return_points,
+      return_coord[1],
+      return_coord[3],
+      return_coord[2],
+      return_curve=true
+    )
+    lines!(
+      ax3d,
+      [point[1] for point in return_curve],
+      [point[2] for point in return_curve],
+      [point[3] for point in return_curve],
+      color=:green,
+      linewidth=3
+    )
+  end
+  
   # Plot return map.
   scatter!(ax2d, return_vals[1:end-1], return_vals[2:end], color=:red, markersize=5)
   
