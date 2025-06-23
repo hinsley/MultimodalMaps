@@ -19,10 +19,10 @@ b_vals = range(ε, stop=1.8, length=1000)
 Z = zeros(length(a_vals), length(b_vals))
 
 # Choose the scan type: :matrix or :determinant.
-scan_type = :determinant
+scan_type = :matrix
 
 # Choose the number of iterates.
-iterates = 8
+iterates = 20
 
 # Choose the color exponent for separation of iterates.
 color_exp = 2
