@@ -15,8 +15,8 @@ function march_squares_simple(
   contour_ys = []
 
   # Iterate over the squares defined by the matrix Z.
-  for i in 1:size(Z, 1)-1
-    for j in 1:size(Z, 2)-1
+  for j in 1:size(Z, 1)-1
+    for i in 1:size(Z, 2)-1
       # Get the four corners of the square.
       x_tl, y_tl = x_vals[i], y_vals[j]
       x_tr, y_tr = x_vals[i+1], y_vals[j]
@@ -30,10 +30,10 @@ function march_squares_simple(
       x_lm, y_lm = (x_bl + x_tl) / 2, (y_bl + y_tl) / 2
 
       # Get the values of the corners.
-      z_tl = Z[i, j]
-      z_tr = Z[i+1, j]
-      z_br = Z[i+1, j+1]
-      z_bl = Z[i, j+1]
+      z_tl = Z[j, i]
+      z_tr = Z[j, i+1]
+      z_br = Z[j+1, i+1]
+      z_bl = Z[j+1, i]
 
       # Determine contour type.
       # Both constant squares and double-diagonal contour squares are left

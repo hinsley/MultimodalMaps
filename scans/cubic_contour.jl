@@ -19,10 +19,10 @@ b_vals = range(ε, stop=1.8, length=1000)
 Z = zeros(length(a_vals), length(b_vals))
 
 # Choose the scan type: :matrix or :determinant.
-scan_type = :matrix
+scan_type = :determinant
 
 # Choose the number of iterates.
-iterates = 20
+iterates = 8
 
 # Choose the color exponent for separation of iterates.
 color_exp = 2
@@ -70,8 +70,8 @@ for iterate in iterates:-1:2
   # Create a contour plot.
   contour_xs, contour_ys = march_squares_simple(
     Z,
-    reverse(a_vals),
-    reverse(b_vals)
+    a_vals,
+    b_vals
   )
   plot!(
     fig,
