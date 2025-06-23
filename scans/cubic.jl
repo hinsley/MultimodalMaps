@@ -52,20 +52,30 @@ Z = zeros(length(a_vals), length(b_vals))
     end
   end
 
-  # Create a heatmap.
+  # Create a heatmap with exact region boundaries.
   heatmap(
     a_vals, b_vals, Z,
     xlabel="a", ylabel="b", 
-    title="Matrix encoding: f(x)=-x(x-a)(x-b)",
+    title="Matrix encoding with region boundaries: f(x)=-x(x-a)(x-b)",
     color=:thermal,#osloS,
     size=(1200, 1200), # Increase plot resolution.
     dpi=300, # Increase DPI for better quality.
     aspect_ratio=:equal # Make axes symmetric.
   )
+
+  # Find all unique values in Z to draw exact boundaries.
+  # We only take every second level to avoid visual clutter.
+  unique_levels = sort(unique(vec(Z)))
+  contour!(
+    a_vals, b_vals, Z,
+    levels=unique_levels,
+    color=:white,
+    linewidth=1
+  )
 # end fps=4
 
 # Optionally save the figure.
-savefig("matrix_encoding_heatmap.png")
+savefig("matrix_encoding_heatmap_with_boundaries.png")
 
 include("../kneading/determinant.jl")
 # @gif for iterates in 1:20
