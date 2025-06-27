@@ -11,8 +11,8 @@ include("../scans/contours.jl")
 include("../maps/double_tent.jl")
 
 # Define parameter ranges.
-a_vals = range(0.5, stop=1, length=2000)
-b_vals = range(0, stop=0.5, length=2000)
+a_vals = range(0, stop=1, length=1500)
+b_vals = range(0, stop=1, length=1500)
 
 # Allocate a matrix to store encoding values for each (a, b) pair.
 Z = zeros(length(a_vals), length(b_vals))
