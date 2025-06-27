@@ -27,22 +27,30 @@ iterates = 20
 # Choose the color exponent for separation of iterates.
 color_exp = 2
 
+# Choose whether to save the figure without a frame.
+frameless = false
+
 # Calculate kneading diagram.
 fig = plot(
   aspect_ratio=:equal,
   colorbar=false,
   xlims=(minimum(a_vals), maximum(a_vals)),
   ylims=(minimum(b_vals), maximum(b_vals)),
-  xlabel="a",
-  ylabel="b",
+  xlabel=frameless ? "" : "a",
+  ylabel=frameless ? "" : "b",
+  legend=false,
   size=(1000, 1000),
   xguidefontsize=14,
   yguidefontsize=14,
   xtickfontsize=12,
   ytickfontsize=12,
-  left_margin=3Plots.mm,
-  bottom_margin=3Plots.mm,
-  right_margin=3Plots.mm
+  left_margin=frameless ? -5Plots.mm : 3Plots.mm,
+  bottom_margin=frameless ? -2.5Plots.mm : 3Plots.mm,
+  right_margin=frameless ? -2Plots.mm : 3Plots.mm,
+  top_margin=frameless ? -5Plots.mm : 3Plots.mm,
+  framestyle=frameless ? :none : :auto,
+  grid=frameless ? false : :auto,
+  ticks=frameless ? nothing : :auto
 )
 for iterate in iterates:-1:2
   @time for i in 1:length(a_vals)
@@ -88,13 +96,19 @@ for iterate in iterates:-1:2
 end
 
 # Add a title to the plot.
-title!(
-  fig,
-  "Kneading diagram: $(uppercasefirst(string(scan_type))) encoding"
-)
+if !frameless
+  title!(
+    fig,
+    "Kneading diagram: $(uppercasefirst(string(scan_type))) encoding"
+  )
+end
 
 # Display the plot.
 display(fig)
 
 # Save the plot to a file.
-savefig(fig, "kneading_diagram_$(uppercasefirst(string(scan_type)))_$(iterates).png")
+if frameless
+  savefig(fig, "kneading_diagram_$(uppercasefirst(string(scan_type)))_$(iterates)_frameless.png")
+else
+  savefig(fig, "kneading_diagram_$(uppercasefirst(string(scan_type)))_$(iterates).png")
+end
